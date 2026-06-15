@@ -30,11 +30,10 @@ build: ## Build all Docker images
 up: _check-model ## Start all services (detached)
 	$(COMPOSE) up -d
 	@echo ""
-	@echo "  UI:     $(BASE_URL)/"
+	@echo "  UI:      $(BASE_URL)/"
 	@echo "  Swagger: $(BASE_URL)/docs"
 	@echo ""
-	@echo "Waiting for services to be healthy..."
-	@$(COMPOSE) wait llm 2>/dev/null || true
+	@echo "(llm healthcheck may still be warming up — 'make logs' to watch)"
 
 down: ## Stop and remove containers
 	$(COMPOSE) down
