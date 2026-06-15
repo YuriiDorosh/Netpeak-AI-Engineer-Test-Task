@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Request Classifier</title>
+  <style>
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2d3148;
+      --accent:    #7c3aed;
+      --accent-hl: #a78bfa;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --success:   #22c55e;
+      --warn:      #f59e0b;
+      --danger:    #ef4444;
+      --mono:      'JetBrains Mono', 'Fira Code', monospace;
+      --sans:      'Inter', system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 4rem;
+    }
+
+    header {
+      width: 100%;
+      max-width: 860px;
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+    }
+    header h1 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: -.01em;
+      color: var(--text);
+    }
+    header p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: .3rem;
+      font-family: var(--mono);
+    }
+    .tag {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      font-size: .65rem;
+      padding: .15rem .45rem;
+      border-radius: 3px;
+      margin-left: .5rem;
+      font-family: var(--mono);
+      vertical-align: middle;
+    }
+
+    main { width: 100%; max-width: 860px; }
+
+    /* ── Upload zone ── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    .drop-zone:hover, .drop-zone.over {
+      border-color: var(--accent);
+      background: rgba(124,58,237,.06);
+    }
+    .drop-zone svg { color: var(--muted); margin-bottom: .75rem; }
+    .drop-zone p  { color: var(--muted); font-size: .85rem; }
+    .drop-zone strong { color: var(--text); }
+    #file-input { display: none; }
+
+    /* ── Button ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: .55rem 1.2rem;
+      font-size: .85rem;
+      font-family: var(--sans);
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn:not(:disabled):hover { opacity: .85; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-ghost:hover { border-color: var(--accent-hl); }
+
+    /* ── Status bar ── */
+    #status-bar {
+      display: none;
+      margin-top: 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      font-size: .85rem;
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress-track {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: .6rem;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width .4s ease;
+    }
+    #status-text { color: var(--muted); font-family: var(--mono); font-size: .78rem; }
+
+    /* ── Results ── */
+    #results { display: none; margin-top: 2rem; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: .75rem;
+    }
+    .section-header h2 { font-size: .95rem; font-weight: 600; }
+    .downloads { display: flex; gap: .5rem; }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .9rem 1rem;
+    }
+    .stat-card .label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; font-family: var(--mono); margin-top: .2rem; }
+    .stat-card .value.high   { color: var(--danger); }
+    .stat-card .value.medium { color: var(--warn); }
+    .stat-card .value.ok     { color: var(--success); }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .8rem;
+    }
+    th {
+      text-align: left;
+      padding: .5rem .75rem;
+      color: var(--muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    td {
+      padding: .6rem .75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+
+    .badge {
+      display: inline-block;
+      font-size: .68rem;
+      padding: .15rem .5rem;
+      border-radius: 4px;
+      font-family: var(--mono);
+      white-space: nowrap;
+    }
+    .badge-high   { background: rgba(239,68,68,.15);  color: #fca5a5; }
+    .badge-medium { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .badge-low    { background: rgba(34,197,94,.1);   color: #86efac; }
+    .badge-cat    { background: rgba(124,58,237,.15); color: var(--accent-hl); }
+    .badge-warn   { background: rgba(245,158,11,.15); color: #fcd34d; }
+
+    .actions-list { list-style: none; }
+    .actions-list li::before { content: '›  '; color: var(--muted); }
+
+    #error-msg {
+      display: none;
+      margin-top: 1rem;
+      padding: .75rem 1rem;
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 6px;
+      color: #fca5a5;
+      font-size: .85rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>AI Request Classifier <span class="tag">Qwen2.5-3B</span></h1>
+  <p>internal tool · Netpeak AI Solutions</p>
+</header>
+
+<main>
+
+  <!-- Upload -->
+  <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/>
+    </svg>
+    <p><strong>Оберіть CSV або перетягніть сюди</strong></p>
+    <p style="margin-top:.4rem">Поля: id, channel, timestamp, raw_text</p>
+  </div>
+  <input type="file" id="file-input" accept=".csv" />
+
+  <div style="margin-top:1rem; display:flex; gap:.5rem;">
+    <button class="btn" id="upload-btn" disabled>Обробити</button>
+    <span id="file-name" style="font-size:.8rem;color:var(--muted);line-height:2.2rem;"></span>
+  </div>
+
+  <div id="error-msg"></div>
+
+  <!-- Status -->
+  <div id="status-bar">
+    <div class="status-row">
+      <div class="spinner" id="spinner"></div>
+      <span id="status-text">Завантаження...</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="section-header">
+      <h2>Результати</h2>
+      <div class="downloads">
+        <a class="btn btn-ghost" id="dl-json" href="#" download="output.json">↓ output.json</a>
+        <a class="btn btn-ghost" id="dl-report" href="#" download="report.md">↓ report.md</a>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <div class="table-wrap">
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Категорія</th>
+            <th>Пріоритет</th>
+            <th>Суть</th>
+            <th>Відділ</th>
+            <th>Уточнення</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  const dropZone   = document.getElementById('drop-zone');
+  const fileInput  = document.getElementById('file-input');
+  const uploadBtn  = document.getElementById('upload-btn');
+  const fileNameEl = document.getElementById('file-name');
+  const statusBar  = document.getElementById('status-bar');
+  const statusText = document.getElementById('status-text');
+  const progressEl = document.getElementById('progress-fill');
+  const spinner    = document.getElementById('spinner');
+  const errorMsg   = document.getElementById('error-msg');
+  const resultsEl  = document.getElementById('results');
+
+  let selectedFile = null;
+  let pollTimer    = null;
+
+  // Drag & drop
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+  function setFile(f) {
+    selectedFile = f;
+    fileNameEl.textContent = f.name;
+    uploadBtn.disabled = false;
+  }
+
+  uploadBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    showError('');
+    uploadBtn.disabled = true;
+
+    const form = new FormData();
+    form.append('file', selectedFile);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || res.statusText); }
+      const { job_id } = await res.json();
+      startPolling(job_id);
+    } catch (err) {
+      showError(err.message);
+      uploadBtn.disabled = false;
+    }
+  });
+
+  function startPolling(jobId) {
+    statusBar.style.display = 'block';
+    resultsEl.style.display = 'none';
+    setStatus('Ставимо в чергу...', 0);
+
+    pollTimer = setInterval(async () => {
+      try {
+        const res  = await fetch(`/api/jobs/${jobId}`);
+        const data = await res.json();
+
+        if (data.status === 'processing' || data.status === 'pending') {
+          const pct = data.total ? Math.round((data.processed / data.total) * 100) : 0;
+          setStatus(`Обробка ${data.processed ?? 0} / ${data.total ?? '?'} запитів...`, pct);
+        }
+
+        if (data.status === 'done') {
+          clearInterval(pollTimer);
+          setStatus('Готово ✓', 100);
+          spinner.style.display = 'none';
+          renderResults(data, jobId);
+        }
+
+        if (data.status === 'failed') {
+          clearInterval(pollTimer);
+          showError('Помилка: ' + (data.error || 'невідома'));
+          statusBar.style.display = 'none';
+          uploadBtn.disabled = false;
+        }
+      } catch (_) { /* transient network error — keep polling */ }
+    }, 1500);
+  }
+
+  function setStatus(msg, pct) {
+    statusText.textContent = msg;
+    progressEl.style.width = pct + '%';
+  }
+
+  function showError(msg) {
+    errorMsg.style.display = msg ? 'block' : 'none';
+    errorMsg.textContent   = msg;
+  }
+
+  function renderResults(data, jobId) {
+    // Download links
+    document.getElementById('dl-json').href   = `/api/jobs/${jobId}/output.json`;
+    document.getElementById('dl-report').href = `/api/jobs/${jobId}/report.md`;
+
+    // Stats
+    const rows = data.result || [];
+    const ok   = rows.filter(r => r.analysis);
+    const cats = {}, pris = {};
+    let clarify = 0;
+    ok.forEach(r => {
+      const a = r.analysis;
+      cats[a.category]  = (cats[a.category]  || 0) + 1;
+      pris[a.priority]  = (pris[a.priority]  || 0) + 1;
+      if (a.needs_clarification) clarify++;
+    });
+    const statsGrid = document.getElementById('stats-grid');
+    statsGrid.innerHTML = `
+      <div class="stat-card"><div class="label">Всього</div><div class="value ok">${rows.length}</div></div>
+      <div class="stat-card"><div class="label">High priority</div><div class="value high">${pris.high || 0}</div></div>
+      <div class="stat-card"><div class="label">Потребують уточнення</div><div class="value medium">${clarify}</div></div>
+      <div class="stat-card"><div class="label">Помилки</div><div class="value ${data.failed ? 'high' : 'ok'}">${data.failed || 0}</div></div>
+    `;
+
+    // Table
+    const tbody = document.getElementById('results-body');
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const a = r.analysis;
+      const tr = document.createElement('tr');
+      if (!a) {
+        tr.innerHTML = `
+          <td style="font-family:var(--mono);font-size:.75rem">${r.id}</td>
+          <td colspan="5" style="color:var(--danger);font-size:.78rem">⚠ ${r.error}</td>`;
+      } else {
+        const actions = a.requested_actions.length
+          ? `<ul class="actions-list">${a.requested_actions.map(x => `<li>${x}</li>`).join('')}</ul>`
+          : '<span style="color:var(--muted)">—</span>';
+        tr.innerHTML = `
+          <td style="font-family:var(--mono);font-size:.75rem;white-space:nowrap">${r.id}</td>
+          <td><span class="badge badge-cat">${a.category}</span></td>
+          <td><span class="badge badge-${a.priority}">${a.priority}</span></td>
+          <td style="max-width:240px">${a.short_summary}</td>
+          <td style="color:var(--muted);font-size:.78rem">${a.target_department || '—'}</td>
+          <td>${a.needs_clarification ? '<span class="badge badge-warn">так</span>' : '—'}</td>`;
+      }
+      tbody.appendChild(tr);
+    });
+
+    resultsEl.style.display = 'block';
+    uploadBtn.disabled = false;
+  }
+</script>
+</body>
+</html>
